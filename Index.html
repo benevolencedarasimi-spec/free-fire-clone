@@ -1,0 +1,1083 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Free Fire Showdown - 3D Battle Royale</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js for 3D Graphics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Teko:wght@500;700&family=Montserrat:wght@400;700;900&display=swap');
+        
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: 'Montserrat', sans-serif;
+            background-color: #07090e;
+            color: #fff;
+        }
+
+        .font-ff {
+            font-family: 'Teko', sans-serif;
+            letter-spacing: 1px;
+        }
+
+        /* Glassmorphism UI Elements */
+        .ff-panel {
+            background: rgba(14, 18, 28, 0.85);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 170, 0, 0.35);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
+        }
+
+        .ff-btn {
+            background: linear-gradient(135deg, #ff9900 0%, #ff4400 100%);
+            text-transform: uppercase;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            box-shadow: 0 4px 20px rgba(255, 102, 0, 0.5);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+        }
+
+        .ff-btn:hover {
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 6px 25px rgba(255, 102, 0, 0.75);
+            filter: brightness(1.15);
+        }
+
+        /* Crosshair Dynamic */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 32px;
+            height: 32px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 20;
+            transition: transform 0.1s ease-out;
+        }
+
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 0 5px rgba(0,0,0,0.9);
+        }
+
+        #crosshair::before {
+            top: 15px; left: 0; width: 32px; height: 2px;
+        }
+
+        #crosshair::after {
+            top: 0; left: 15px; width: 2px; height: 32px;
+        }
+
+        .crosshair-dot {
+            position: absolute;
+            top: 14px; left: 14px; width: 4px; height: 4px;
+            background: #ff3300;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #ff3300;
+        }
+
+        /* Damage Floating Text */
+        .damage-num {
+            position: absolute;
+            font-family: 'Teko', sans-serif;
+            font-weight: 700;
+            font-size: 32px;
+            pointer-events: none;
+            animation: floatUp 0.8s ease-out forwards;
+            text-shadow: 2px 2px 0px #000, -2px -2px 0px #000;
+            z-index: 30;
+        }
+
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) scale(0.8); }
+            40% { transform: translateY(-35px) scale(1.4); }
+            100% { opacity: 0; transform: translateY(-60px) scale(0.9); }
+        }
+
+        /* Scope overlay effect */
+        #scope-overlay {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle, transparent 30%, rgba(0,0,0,0.95) 70%);
+            border: 2px solid rgba(0, 255, 200, 0.4);
+            pointer-events: none;
+            z-index: 15;
+            display: none;
+        }
+
+        /* Custom Scrollbar for Killfeed */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 153, 0, 0.6); border-radius: 2px; }
+    </style>
+</head>
+<body class="bg-black text-white select-none overflow-hidden">
+
+    <!-- GAME CANVAS CONTAINER -->
+    <div id="canvas-container" class="w-full h-screen absolute inset-0 z-0"></div>
+
+    <!-- SCOPE OVERLAY -->
+    <div id="scope-overlay">
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div class="w-full h-[1px] bg-emerald-400/50"></div>
+            <div class="h-full w-[1px] bg-emerald-400/50 absolute"></div>
+            <div class="w-48 h-48 border border-emerald-400/40 rounded-full absolute"></div>
+        </div>
+    </div>
+
+    <!-- START / LOBBY MENU -->
+    <div id="lobby-screen" class="absolute inset-0 z-50 flex flex-col items-center justify-between p-6 bg-gradient-to-b from-slate-950/90 via-black/85 to-slate-950/98">
+        <!-- Title Banner -->
+        <div class="text-center mt-6">
+            <h1 class="font-ff text-7xl md:text-9xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-orange-500 to-red-600 drop-shadow-[0_6px_10px_rgba(0,0,0,0.9)] uppercase italic">
+                Free Fire
+            </h1>
+            <p class="text-xs md:text-sm uppercase tracking-[0.5em] text-amber-400/90 -mt-3 font-semibold">
+                Showdown 3D Battle Royale
+            </p>
+        </div>
+
+        <!-- Character Selection Carousel -->
+        <div class="w-full max-w-4xl my-auto">
+            <h2 class="text-center font-ff text-3xl text-amber-400 mb-4 tracking-wide uppercase">Choose Survivor Ability</h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 px-2">
+                
+                <!-- DJ Alok -->
+                <div onclick="selectCharacter('alok')" id="char-alok" class="char-card ff-panel rounded-xl p-4 cursor-pointer border-2 border-amber-400 bg-amber-500/20 transition-all transform hover:scale-105">
+                    <div class="w-12 h-12 rounded-full bg-blue-500/30 text-blue-400 flex items-center justify-center text-2xl mb-2 mx-auto border border-blue-400">
+                        <i class="fa-solid fa-volume-high"></i>
+                    </div>
+                    <h3 class="font-ff text-2xl text-center font-bold text-white">DJ ALOK</h3>
+                    <p class="text-xs text-amber-300 text-center font-semibold">Drop The Beat</p>
+                    <p class="text-[10px] text-gray-300 mt-2 text-center leading-tight">Speed aura + 60 HP health regen pulse [Q].</p>
+                </div>
+
+                <!-- Chrono -->
+                <div onclick="selectCharacter('chrono')" id="char-chrono" class="char-card ff-panel rounded-xl p-4 cursor-pointer border-2 border-transparent hover:border-amber-400/50 transition-all transform hover:scale-105">
+                    <div class="w-12 h-12 rounded-full bg-cyan-500/30 text-cyan-400 flex items-center justify-center text-2xl mb-2 mx-auto border border-cyan-400">
+                        <i class="fa-solid fa-shield-halved"></i>
+                    </div>
+                    <h3 class="font-ff text-2xl text-center font-bold text-white">CHRONO</h3>
+                    <p class="text-xs text-cyan-300 text-center font-semibold">Time Turner</p>
+                    <p class="text-[10px] text-gray-300 mt-2 text-center leading-tight">Deploys impenetrable force dome shield [Q].</p>
+                </div>
+
+                <!-- Wukong -->
+                <div onclick="selectCharacter('wukong')" id="char-wukong" class="char-card ff-panel rounded-xl p-4 cursor-pointer border-2 border-transparent hover:border-amber-400/50 transition-all transform hover:scale-105">
+                    <div class="w-12 h-12 rounded-full bg-emerald-500/30 text-emerald-400 flex items-center justify-center text-2xl mb-2 mx-auto border border-emerald-400">
+                        <i class="fa-solid fa-tree"></i>
+                    </div>
+                    <h3 class="font-ff text-2xl text-center font-bold text-white">WUKONG</h3>
+                    <p class="text-xs text-emerald-300 text-center font-semibold">Camouflage</p>
+                    <p class="text-[10px] text-gray-300 mt-2 text-center leading-tight">Turns into bush, breaking enemy targeting [Q].</p>
+                </div>
+
+                <!-- Kelly -->
+                <div onclick="selectCharacter('kelly')" id="char-kelly" class="char-card ff-panel rounded-xl p-4 cursor-pointer border-2 border-transparent hover:border-amber-400/50 transition-all transform hover:scale-105">
+                    <div class="w-12 h-12 rounded-full bg-red-500/30 text-red-400 flex items-center justify-center text-2xl mb-2 mx-auto border border-red-400">
+                        <i class="fa-solid fa-bolt"></i>
+                    </div>
+                    <h3 class="font-ff text-2xl text-center font-bold text-white">KELLY</h3>
+                    <p class="text-xs text-red-300 text-center font-semibold">Dash Sprint</p>
+                    <p class="text-[10px] text-gray-300 mt-2 text-center leading-tight">35% passive sprint boost & enhanced firing speed.</p>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Controls Guide & Play Button -->
+        <div class="w-full max-w-xl flex flex-col items-center gap-4 mb-4">
+            <div class="ff-panel px-6 py-3 rounded-lg text-xs text-gray-300 flex flex-wrap justify-around gap-3 w-full">
+                <span><b class="text-amber-400">WASD</b> Move</span>
+                <span><b class="text-amber-400">L-Click</b> Fire</span>
+                <span><b class="text-amber-400">R-Click</b> Scope</span>
+                <span><b class="text-amber-400">Q</b> Ability</span>
+                <span><b class="text-amber-400">F</b> Gloo Wall</span>
+                <span><b class="text-amber-400">1-4</b> Switch Guns</span>
+                <span><b class="text-amber-400">R</b> Reload</span>
+                <span><b class="text-amber-400">H</b> Medkit</span>
+            </div>
+
+            <button onclick="startGame()" class="ff-btn px-14 py-4 text-3xl font-ff text-black hover:text-white cursor-pointer tracking-wider">
+                <i class="fa-solid fa-crosshairs mr-2"></i> ENTER BATTLEGROUND
+            </button>
+        </div>
+    </div>
+
+    <!-- HUD OVERLAY (IN-GAME) -->
+    <div id="hud-overlay" class="absolute inset-0 z-10 pointer-events-none hidden flex flex-col justify-between p-4">
+        
+        <!-- TOP HUD: Stats, Minimap, Killfeed -->
+        <div class="flex justify-between items-start w-full">
+            
+            <!-- Left Top: Player Stats & Safe Zone Timer -->
+            <div class="flex flex-col gap-2">
+                <div class="ff-panel px-4 py-2 rounded-lg flex items-center gap-6 border-l-4 border-l-amber-500">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-user-group text-amber-400 text-sm"></i>
+                        <span class="text-xs text-gray-400 uppercase font-bold">Alive</span>
+                        <span id="hud-alive" class="font-ff text-2xl text-white font-bold">12</span>
+                    </div>
+                    <div class="h-6 w-[1px] bg-gray-600"></div>
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-skull text-red-500 text-sm"></i>
+                        <span class="text-xs text-gray-400 uppercase font-bold">Kills</span>
+                        <span id="hud-kills" class="font-ff text-2xl text-red-400 font-bold">0</span>
+                    </div>
+                </div>
+
+                <!-- Safe Zone Timer -->
+                <div class="ff-panel px-3 py-1.5 rounded-lg flex items-center gap-2 w-fit">
+                    <i id="zone-icon" class="fa-solid fa-circle-radiation text-amber-400 animate-pulse text-xs"></i>
+                    <span id="zone-status-text" class="text-xs font-semibold text-amber-300">Zone Shrinking:</span>
+                    <span id="zone-timer" class="font-ff text-xl text-white font-bold">00:30</span>
+                </div>
+            </div>
+
+            <!-- Center Top: Killfeed Ticker -->
+            <div id="killfeed-container" class="flex flex-col items-center gap-1 max-w-xs overflow-hidden h-24 text-right pr-2"></div>
+
+            <!-- Right Top: Minimap -->
+            <div class="pointer-events-auto">
+                <div class="relative rounded-full border-2 border-amber-400 overflow-hidden shadow-2xl w-32 h-32 md:w-40 md:h-40 bg-slate-900/90">
+                    <canvas id="minimap-canvas" class="w-full h-full"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- CROSSHAIR -->
+        <div id="crosshair">
+            <div class="crosshair-dot"></div>
+        </div>
+
+        <!-- BOTTOM HUD: Health, EP, Weapons & Tactical Skills -->
+        <div class="flex flex-col md:flex-row justify-between items-end gap-4 w-full">
+            
+            <!-- Health & EP Bars -->
+            <div class="flex flex-col gap-1 w-full max-w-xs">
+                <!-- EP Bar -->
+                <div class="flex items-center justify-between text-xs font-bold text-amber-400 px-1">
+                    <span>EP</span>
+                    <span id="ep-val">100/100</span>
+                </div>
+                <div class="w-full h-2 bg-gray-900/80 rounded-full border border-amber-500/40 overflow-hidden">
+                    <div id="ep-bar" class="h-full bg-gradient-to-r from-amber-500 to-yellow-300 w-full transition-all duration-300"></div>
+                </div>
+
+                <!-- HP Bar -->
+                <div class="flex items-center justify-between text-xs font-bold text-emerald-400 px-1 mt-1">
+                    <span class="flex items-center gap-1"><i class="fa-solid fa-heart"></i> HP</span>
+                    <span id="hp-val">200/200</span>
+                </div>
+                <div class="w-full h-4 bg-gray-900/80 rounded-full border border-emerald-500/50 p-0.5 overflow-hidden">
+                    <div id="hp-bar" class="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full w-full transition-all duration-300"></div>
+                </div>
+
+                <!-- Vest & Helmet Status -->
+                <div class="flex gap-4 mt-1 text-[11px] text-gray-300">
+                    <span class="flex items-center gap-1"><i class="fa-solid fa-shield-cat text-blue-400"></i> Helmet: <b id="helmet-lvl" class="text-white">Lvl 2</b></span>
+                    <span class="flex items-center gap-1"><i class="fa-solid fa-vest text-blue-400"></i> Vest: <b id="vest-lvl" class="text-white">Lvl 2</b></span>
+                </div>
+            </div>
+
+            <!-- Tactical Skills Buttons -->
+            <div class="flex items-center gap-3 pointer-events-auto">
+                <!-- Character Skill -->
+                <button id="btn-skill" onclick="triggerSkill()" class="touch-btn w-14 h-14 rounded-full bg-amber-500/20 border-2 border-amber-400 text-amber-400 flex flex-col items-center justify-center relative shadow-lg hover:bg-amber-500/40">
+                    <i id="skill-icon" class="fa-solid fa-bolt text-lg"></i>
+                    <span class="text-[9px] font-bold mt-0.5">ABILITY [Q]</span>
+                    <div id="skill-cd-overlay" class="absolute inset-0 bg-black/80 rounded-full flex items-center justify-center font-bold text-amber-400 text-xs hidden">20s</div>
+                </button>
+
+                <!-- Gloo Wall Button -->
+                <button id="btn-gloo" onclick="deployGlooWall()" class="touch-btn w-14 h-14 rounded-full bg-cyan-500/20 border-2 border-cyan-400 text-cyan-300 flex flex-col items-center justify-center relative shadow-lg hover:bg-cyan-500/40">
+                    <i class="fa-solid fa-shield text-lg"></i>
+                    <span class="text-[9px] font-bold mt-0.5">GLOO [F]</span>
+                    <span id="gloo-count" class="absolute -top-1 -right-1 bg-cyan-500 text-black text-xs font-bold px-1.5 py-0.2 rounded-full">3</span>
+                </button>
+
+                <!-- Medkit Button -->
+                <button id="btn-medkit" onclick="useMedkit()" class="touch-btn w-14 h-14 rounded-full bg-emerald-500/20 border-2 border-emerald-400 text-emerald-300 flex flex-col items-center justify-center relative shadow-lg hover:bg-emerald-500/40">
+                    <i class="fa-solid fa-kit-medical text-lg"></i>
+                    <span class="text-[9px] font-bold mt-0.5">MED [H]</span>
+                    <span id="med-count" class="absolute -top-1 -right-1 bg-emerald-500 text-black text-xs font-bold px-1.5 py-0.2 rounded-full">2</span>
+                </button>
+            </div>
+
+            <!-- Weapons Arsenal Bar -->
+            <div class="flex gap-2 pointer-events-auto">
+                <div id="weapon-slot-1" onclick="switchWeapon(0)" class="ff-panel p-2 rounded-lg border-2 border-amber-400 cursor-pointer flex flex-col justify-between w-24 h-20 bg-amber-500/10">
+                    <div class="flex justify-between text-[10px] text-amber-300 font-bold">
+                        <span>AK47</span>
+                        <span>[1]</span>
+                    </div>
+                    <div class="text-center my-auto"><i class="fa-solid fa-gun text-2xl text-amber-400"></i></div>
+                    <div class="text-right font-ff text-lg font-bold leading-none"><span id="wep1-ammo">30</span>/<span id="wep1-max" class="text-xs text-gray-400">180</span></div>
+                </div>
+
+                <div id="weapon-slot-2" onclick="switchWeapon(1)" class="ff-panel p-2 rounded-lg border-2 border-transparent cursor-pointer flex flex-col justify-between w-24 h-20 hover:border-gray-500">
+                    <div class="flex justify-between text-[10px] text-gray-400 font-bold">
+                        <span>MP40</span>
+                        <span>[2]</span>
+                    </div>
+                    <div class="text-center my-auto"><i class="fa-solid fa-gun text-2xl text-gray-400"></i></div>
+                    <div class="text-right font-ff text-lg font-bold leading-none text-gray-300"><span id="wep2-ammo">32</span>/<span id="wep2-max" class="text-xs text-gray-500">200</span></div>
+                </div>
+
+                <div id="weapon-slot-3" onclick="switchWeapon(2)" class="ff-panel p-2 rounded-lg border-2 border-transparent cursor-pointer flex flex-col justify-between w-24 h-20 hover:border-gray-500">
+                    <div class="flex justify-between text-[10px] text-gray-400 font-bold">
+                        <span>M1887</span>
+                        <span>[3]</span>
+                    </div>
+                    <div class="text-center my-auto"><i class="fa-solid fa-bullseye text-2xl text-gray-400"></i></div>
+                    <div class="text-right font-ff text-lg font-bold leading-none text-gray-300"><span id="wep3-ammo">2</span>/<span id="wep3-max" class="text-xs text-gray-500">40</span></div>
+                </div>
+
+                <div id="weapon-slot-4" onclick="switchWeapon(3)" class="ff-panel p-2 rounded-lg border-2 border-transparent cursor-pointer flex flex-col justify-between w-24 h-20 hover:border-gray-500">
+                    <div class="flex justify-between text-[10px] text-gray-400 font-bold">
+                        <span>AWM</span>
+                        <span>[4]</span>
+                    </div>
+                    <div class="text-center my-auto"><i class="fa-solid fa-crosshairs text-2xl text-gray-400"></i></div>
+                    <div class="text-right font-ff text-lg font-bold leading-none text-gray-300"><span id="wep4-ammo">5</span>/<span id="wep4-max" class="text-xs text-gray-500">25</span></div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- GAME OVER / VICTORY OVERLAY -->
+    <div id="game-over-screen" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-md hidden">
+        <div class="text-center p-8 ff-panel rounded-2xl max-w-md w-full border-2 border-amber-500/60 shadow-2xl">
+            <h1 id="result-title" class="font-ff text-8xl font-extrabold tracking-wider text-amber-400 drop-shadow-[0_5px_15px_rgba(255,153,0,0.8)] italic uppercase">
+                BOOYAH!
+            </h1>
+            <p class="text-sm font-semibold tracking-widest text-amber-200 uppercase -mt-2 mb-6">Battle Royale Winner</p>
+
+            <div class="grid grid-cols-2 gap-4 my-6 bg-slate-900/80 p-4 rounded-xl border border-gray-800">
+                <div class="flex flex-col items-center">
+                    <span class="text-xs text-gray-400 uppercase font-bold">Kills</span>
+                    <span id="end-kills" class="font-ff text-4xl text-amber-400 font-bold">0</span>
+                </div>
+                <div class="flex flex-col items-center">
+                    <span class="text-xs text-gray-400 uppercase font-bold">Damage</span>
+                    <span id="end-damage" class="font-ff text-4xl text-red-400 font-bold">0</span>
+                </div>
+                <div class="flex flex-col items-center col-span-2">
+                    <span class="text-xs text-gray-400 uppercase font-bold">Rank Placement</span>
+                    <span id="end-rank" class="font-ff text-3xl text-emerald-400 font-bold">#1 / 12</span>
+                </div>
+            </div>
+
+            <button onclick="returnToLobby()" class="ff-btn px-8 py-3 text-2xl font-ff text-black hover:text-white cursor-pointer w-full tracking-wider mt-2">
+                <i class="fa-solid fa-rotate-right mr-2"></i> PLAY AGAIN
+            </button>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT GAME LOGIC -->
+    <script>
+        /* --- AUDIO SYNTHESIS ENGINE --- */
+        class SoundFX {
+            constructor() { this.ctx = null; }
+            init() { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+
+            playShoot(type = 'ar') {
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = type === 'shotgun' || type === 'sniper' ? 'sawtooth' : 'triangle';
+                osc.frequency.setValueAtTime(type === 'sniper' ? 120 : (type === 'shotgun' ? 180 : 320), now);
+                osc.frequency.exponentialRampToValueAtTime(0.01, now + (type === 'sniper' ? 0.35 : 0.12));
+
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.18);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            }
+
+            playHit() {
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.exponentialRampToValueAtTime(150, now + 0.08);
+
+                gain.gain.setValueAtTime(0.25, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.08);
+            }
+
+            playGlooWall() {
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.linearRampToValueAtTime(500, now + 0.2);
+
+                gain.gain.setValueAtTime(0.5, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            }
+
+            playBooyah() {
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                [261.63, 329.63, 392.00, 523.25].forEach((f, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(f, now + idx * 0.1);
+                    gain.gain.setValueAtTime(0.3, now + idx * 0.1);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.1 + 0.5);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + idx * 0.1);
+                    osc.stop(now + idx * 0.1 + 0.5);
+                });
+            }
+        }
+
+        const audio = new SoundFX();
+
+        /* --- WEAPONS ARSENAL --- */
+        const WEAPONS = [
+            { id: 'ak47', name: 'AK47', damage: 32, fireRate: 110, magSize: 30, currentAmmo: 30, maxAmmo: 180, type: 'ar' },
+            { id: 'mp40', name: 'MP40', damage: 20, fireRate: 70, magSize: 32, currentAmmo: 32, maxAmmo: 200, type: 'smg' },
+            { id: 'm1887', name: 'M1887', damage: 85, fireRate: 650, magSize: 2, currentAmmo: 2, maxAmmo: 40, type: 'shotgun' },
+            { id: 'awm', name: 'AWM', damage: 150, fireRate: 1100, magSize: 5, currentAmmo: 5, maxAmmo: 25, type: 'sniper' }
+        ];
+
+        /* --- GAME STATE --- */
+        let gameState = {
+            active: false,
+            character: 'alok',
+            hp: 200, maxHp: 200, ep: 100, maxEp: 100,
+            kills: 0, totalDamage: 0, alive: 12,
+            currentWeaponIdx: 0, glooWalls: 3, medkits: 2,
+            skillCooldown: false, scoped: false,
+            zoneRadius: 220, zoneTimer: 30
+        };
+
+        /* --- THREE.JS ENGINE GLOBALS --- */
+        let scene, camera, renderer;
+        let playerMesh, planeFloor;
+        let keys = {};
+        let mouse = new THREE.Vector2();
+        let raycaster = new THREE.Raycaster();
+
+        let bots = [];
+        let glooWalls = [];
+        let airdrops = [];
+        let redDotsMinimap = [];
+        let zoneMesh;
+
+        let lastShootTime = 0;
+        let minimapCanvas, minimapCtx;
+
+        window.onload = () => {
+            minimapCanvas = document.getElementById('minimap-canvas');
+            if (minimapCanvas) minimapCtx = minimapCanvas.getContext('2d');
+            setupInputListeners();
+        };
+
+        function selectCharacter(charId) {
+            gameState.character = charId;
+            document.querySelectorAll('.char-card').forEach(card => {
+                card.classList.remove('border-amber-400', 'bg-amber-500/20');
+                card.classList.add('border-transparent');
+            });
+            const sel = document.getElementById(`char-${charId}`);
+            if (sel) {
+                sel.classList.remove('border-transparent');
+                sel.classList.add('border-amber-400', 'bg-amber-500/20');
+            }
+        }
+
+        function startGame() {
+            audio.init();
+            document.getElementById('lobby-screen').classList.add('hidden');
+            document.getElementById('hud-overlay').classList.remove('hidden');
+
+            initThreeScene();
+            resetGameState();
+            spawnBots(11); // 11 bots + 1 player = 12 Alive
+            spawnAirdrop();
+            setupZone();
+
+            gameState.active = true;
+            animate();
+            startZoneTimer();
+        }
+
+        function resetGameState() {
+            gameState.hp = 200; gameState.ep = 100;
+            gameState.kills = 0; gameState.totalDamage = 0; gameState.alive = 12;
+            gameState.glooWalls = 3; gameState.medkits = 2; gameState.zoneRadius = 220;
+            WEAPONS.forEach(w => w.currentAmmo = w.magSize);
+            updateHUD();
+        }
+
+        /* --- THREE.JS SCENE SETUP --- */
+        function initThreeScene() {
+            const container = document.getElementById('canvas-container');
+            container.innerHTML = '';
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb);
+            scene.fog = new THREE.FogExp2(0x87ceeb, 0.0035);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // Lighting
+            const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambient);
+
+            const sun = new THREE.DirectionalLight(0xfff5e0, 0.9);
+            sun.position.set(100, 150, 80);
+            sun.castShadow = true;
+            sun.shadow.mapSize.width = 2048;
+            sun.shadow.mapSize.height = 2048;
+            scene.add(sun);
+
+            // Map Terrain
+            const floorGeo = new THREE.PlaneGeometry(500, 500);
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0x4e7029, roughness: 0.8 });
+            planeFloor = new THREE.Mesh(floorGeo, floorMat);
+            planeFloor.rotation.x = -Math.PI / 2;
+            planeFloor.receiveShadow = true;
+            scene.add(planeFloor);
+
+            // Environment Objects
+            createEnvironment();
+
+            // Player Mesh
+            createPlayerMesh();
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createPlayerMesh() {
+            const group = new THREE.Group();
+
+            const bodyGeo = new THREE.CylinderGeometry(0.5, 0.4, 1.6, 8);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0xff7700 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 0.8;
+            body.castShadow = true;
+            group.add(body);
+
+            const headGeo = new THREE.SphereGeometry(0.35, 8, 8);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0xffcc99 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 1.8;
+            head.castShadow = true;
+            group.add(head);
+
+            group.position.set(0, 0, 0);
+            scene.add(group);
+            playerMesh = group;
+        }
+
+        function createEnvironment() {
+            // Shipping Crates
+            const crateGeo = new THREE.BoxGeometry(3, 3, 3);
+            const crateMat = new THREE.MeshStandardMaterial({ color: 0xa83232 });
+            for (let i = 0; i < 35; i++) {
+                const crate = new THREE.Mesh(crateGeo, crateMat);
+                crate.position.set((Math.random() - 0.5) * 350, 1.5, (Math.random() - 0.5) * 350);
+                crate.castShadow = true;
+                crate.receiveShadow = true;
+                scene.add(crate);
+            }
+
+            // Trees
+            const trunkGeo = new THREE.CylinderGeometry(0.3, 0.5, 3);
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a3d28 });
+            const leavesGeo = new THREE.ConeGeometry(2.5, 5, 6);
+            const leavesMat = new THREE.MeshStandardMaterial({ color: 0x225511 });
+
+            for (let i = 0; i < 50; i++) {
+                const tree = new THREE.Group();
+                const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+                trunk.position.y = 1.5;
+                const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+                leaves.position.y = 4;
+                tree.add(trunk); tree.add(leaves);
+                tree.position.set((Math.random() - 0.5) * 400, 0, (Math.random() - 0.5) * 400);
+                scene.add(tree);
+            }
+        }
+
+        /* --- BOTS AI SPAWNING --- */
+        function spawnBots(count) {
+            bots = [];
+            const botColors = [0x2563eb, 0xdc2626, 0x9333ea, 0x059669];
+
+            for (let i = 0; i < count; i++) {
+                const group = new THREE.Group();
+                const col = botColors[i % botColors.length];
+
+                const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.4, 1.6, 8), new THREE.MeshStandardMaterial({ color: col }));
+                body.position.y = 0.8;
+                body.castShadow = true;
+                group.add(body);
+
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), new THREE.MeshStandardMaterial({ color: 0xffcc99 }));
+                head.position.y = 1.8;
+                group.add(head);
+
+                group.position.set((Math.random() - 0.5) * 320, 0, (Math.random() - 0.5) * 320);
+                scene.add(group);
+
+                bots.push({
+                    mesh: group, hp: 100, name: `Survivor_${i + 1}`,
+                    shootTimer: 0, glooDeployed: false,
+                    moveDir: new THREE.Vector3((Math.random() - 0.5), 0, (Math.random() - 0.5)).normalize()
+                });
+            }
+        }
+
+        function spawnAirdrop() {
+            const dropGeo = new THREE.BoxGeometry(2, 2, 2);
+            const dropMat = new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0x443300 });
+            const crate = new THREE.Mesh(dropGeo, dropMat);
+            crate.position.set(20, 1, -30);
+            scene.add(crate);
+            airdrops.push(crate);
+            addKillFeedNotice("Airdrop crate landed nearby!");
+        }
+
+        /* --- ZONE LOGIC --- */
+        function setupZone() {
+            const zoneGeo = new THREE.CylinderGeometry(gameState.zoneRadius, gameState.zoneRadius, 60, 32, 1, true);
+            const zoneMat = new THREE.MeshBasicMaterial({ color: 0x00d9ff, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+            zoneMesh = new THREE.Mesh(zoneGeo, zoneMat);
+            zoneMesh.position.set(0, 30, 0);
+            scene.add(zoneMesh);
+        }
+
+        function startZoneTimer() {
+            setInterval(() => {
+                if (!gameState.active) return;
+                if (gameState.zoneTimer > 0) {
+                    gameState.zoneTimer--;
+                    const mins = String(Math.floor(gameState.zoneTimer / 60)).padStart(2, '0');
+                    const secs = String(gameState.zoneTimer % 60).padStart(2, '0');
+                    document.getElementById('zone-timer').innerText = `${mins}:${secs}`;
+                } else if (gameState.zoneRadius > 20) {
+                    gameState.zoneRadius -= 20;
+                    zoneMesh.scale.set(gameState.zoneRadius / 220, 1, gameState.zoneRadius / 220);
+                    addKillFeedNotice("Electric Safe Zone Shrinking!");
+                    gameState.zoneTimer = 25;
+                }
+
+                // Zone damage check
+                if (playerMesh) {
+                    const dist = Math.hypot(playerMesh.position.x, playerMesh.position.z);
+                    if (dist > gameState.zoneRadius) takeDamage(5);
+                }
+            }, 1000);
+        }
+
+        /* --- INPUT LISTENERS --- */
+        function setupInputListeners() {
+            window.addEventListener('keydown', e => {
+                keys[e.key.toLowerCase()] = true;
+                if (e.key === '1') switchWeapon(0);
+                if (e.key === '2') switchWeapon(1);
+                if (e.key === '3') switchWeapon(2);
+                if (e.key === '4') switchWeapon(3);
+                if (e.key.toLowerCase() === 'q') triggerSkill();
+                if (e.key.toLowerCase() === 'f') deployGlooWall();
+                if (e.key.toLowerCase() === 'r') reloadWeapon();
+                if (e.key.toLowerCase() === 'h') useMedkit();
+            });
+
+            window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+            window.addEventListener('mousemove', e => {
+                if (!gameState.active) return;
+                mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            });
+
+            window.addEventListener('mousedown', e => {
+                if (!gameState.active) return;
+                if (e.button === 0) shootWeapon();
+                if (e.button === 2) toggleScope(true);
+            });
+
+            window.addEventListener('mouseup', e => {
+                if (e.button === 2) toggleScope(false);
+            });
+
+            window.addEventListener('contextmenu', e => e.preventDefault());
+        }
+
+        /* --- GAMEPLAY MECHANICS --- */
+        function toggleScope(enable) {
+            gameState.scoped = enable;
+            document.getElementById('scope-overlay').style.display = enable ? 'block' : 'none';
+        }
+
+        function triggerSkill() {
+            if (gameState.skillCooldown) return;
+            gameState.skillCooldown = true;
+
+            if (gameState.character === 'alok') {
+                gameState.hp = Math.min(gameState.maxHp, gameState.hp + 60);
+                addKillFeedNotice("DJ Alok: Drop The Beat Active!");
+            } else {
+                addKillFeedNotice("Active Ability Triggered!");
+            }
+
+            updateHUD();
+
+            let cd = 20;
+            const cdOverlay = document.getElementById('skill-cd-overlay');
+            cdOverlay.classList.remove('hidden');
+            const timer = setInterval(() => {
+                cd--;
+                cdOverlay.innerText = `${cd}s`;
+                if (cd <= 0) {
+                    clearInterval(timer);
+                    gameState.skillCooldown = false;
+                    cdOverlay.classList.add('hidden');
+                }
+            }, 1000);
+        }
+
+        function deployGlooWall() {
+            if (gameState.glooWalls <= 0 || !playerMesh) return;
+            gameState.glooWalls--;
+
+            const wall = new THREE.Mesh(
+                new THREE.BoxGeometry(5, 3, 0.6),
+                new THREE.MeshStandardMaterial({ color: 0x00d9ff, transparent: true, opacity: 0.85 })
+            );
+
+            const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(playerMesh.quaternion);
+            wall.position.copy(playerMesh.position).add(forward.multiplyScalar(3.5));
+            wall.position.y = 1.5;
+            wall.rotation.copy(playerMesh.rotation);
+
+            scene.add(wall);
+            glooWalls.push(wall);
+            audio.playGlooWall();
+            updateHUD();
+        }
+
+        function useMedkit() {
+            if (gameState.medkits > 0 && gameState.hp < gameState.maxHp) {
+                gameState.medkits--;
+                gameState.hp = Math.min(gameState.maxHp, gameState.hp + 75);
+                updateHUD();
+                addKillFeedNotice("Used Medkit (+75 HP)");
+            }
+        }
+
+        function switchWeapon(idx) {
+            gameState.currentWeaponIdx = idx;
+            for (let i = 0; i < 4; i++) {
+                const slot = document.getElementById(`weapon-slot-${i + 1}`);
+                if (i === idx) {
+                    slot.classList.add('border-amber-400', 'bg-amber-500/10');
+                    slot.classList.remove('border-transparent');
+                } else {
+                    slot.classList.remove('border-amber-400', 'bg-amber-500/10');
+                    slot.classList.add('border-transparent');
+                }
+            }
+        }
+
+        function reloadWeapon() {
+            const wep = WEAPONS[gameState.currentWeaponIdx];
+            if (wep.maxAmmo > 0) {
+                const needed = wep.magSize - wep.currentAmmo;
+                const reloadAmount = Math.min(needed, wep.maxAmmo);
+                wep.currentAmmo += reloadAmount;
+                wep.maxAmmo -= reloadAmount;
+                updateHUD();
+            }
+        }
+
+        function shootWeapon() {
+            const now = performance.now();
+            const wep = WEAPONS[gameState.currentWeaponIdx];
+
+            if (now - lastShootTime < wep.fireRate) return;
+            if (wep.currentAmmo <= 0) { reloadWeapon(); return; }
+
+            lastShootTime = now;
+            wep.currentAmmo--;
+            audio.playShoot(wep.type);
+            updateHUD();
+
+            // Fire sound red marker on minimap
+            redDotsMinimap.push({ x: playerMesh.position.x, z: playerMesh.position.z, time: 1.0 });
+
+            // Raycasting against bots & gloo walls
+            raycaster.setFromCamera(mouse, camera);
+            const targets = [...bots.map(b => b.mesh), ...glooWalls];
+            const intersects = raycaster.intersectObjects(targets, true);
+
+            if (intersects.length > 0) {
+                const hitObj = intersects[0].object;
+
+                // Hit Gloo Wall
+                if (glooWalls.includes(hitObj)) return;
+
+                // Hit Bot
+                const bot = bots.find(b => b.mesh === hitObj.parent || b.mesh === hitObj);
+                if (bot) {
+                    const isHeadshot = intersects[0].point.y > 1.5;
+                    const dmg = isHeadshot ? wep.damage * 2 : wep.damage;
+
+                    bot.hp -= dmg;
+                    gameState.totalDamage += dmg;
+                    audio.playHit();
+
+                    showDamageNumber(intersects[0].point, dmg, isHeadshot);
+
+                    // Bot smart gloo wall response when low
+                    if (bot.hp <= 40 && !bot.glooDeployed) {
+                        bot.glooDeployed = true;
+                        const botWall = new THREE.Mesh(
+                            new THREE.BoxGeometry(4, 3, 0.6),
+                            new THREE.MeshStandardMaterial({ color: 0x00d9ff })
+                        );
+                        botWall.position.copy(bot.mesh.position).add(new THREE.Vector3(0, 1.5, 2));
+                        scene.add(botWall);
+                        glooWalls.push(botWall);
+                    }
+
+                    if (bot.hp <= 0) {
+                        scene.remove(bot.mesh);
+                        bots = bots.filter(b => b !== bot);
+                        gameState.kills++;
+                        gameState.alive--;
+                        addKillFeedNotice(`You eliminated ${bot.name}!`);
+                        updateHUD();
+
+                        if (gameState.alive <= 1) triggerVictory();
+                    }
+                }
+            }
+        }
+
+        function takeDamage(amount) {
+            gameState.hp -= amount;
+            if (gameState.hp <= 0) {
+                gameState.hp = 0;
+                triggerGameOver();
+            }
+            updateHUD();
+        }
+
+        function showDamageNumber(pos3D, dmg, isHeadshot) {
+            const screenPos = pos3D.clone().project(camera);
+            const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (-(screenPos.y * 0.5) + 0.5) * window.innerHeight;
+
+            const el = document.createElement('div');
+            el.className = 'damage-num';
+            el.style.left = `${x}px`; el.style.top = `${y}px`;
+            el.style.color = isHeadshot ? '#ff0033' : '#ffcc00';
+            el.innerText = isHeadshot ? `HEADSHOT ${dmg}` : dmg;
+
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 800);
+        }
+
+        function addKillFeedNotice(msg) {
+            const container = document.getElementById('killfeed-container');
+            const el = document.createElement('div');
+            el.className = 'text-xs text-amber-300 font-bold bg-black/70 px-2 py-1 rounded border-r-2 border-amber-400';
+            el.innerText = msg;
+            container.prepend(el);
+            if (container.children.length > 4) container.removeChild(container.lastChild);
+        }
+
+        /* --- MAIN ANIMATION LOOP --- */
+        function animate() {
+            if (!gameState.active) return;
+            requestAnimationFrame(animate);
+
+            // Movement
+            const moveSpeed = gameState.character === 'kelly' ? 0.32 : 0.24;
+            if (keys['w'] || keys['arrowup']) playerMesh.position.z -= moveSpeed;
+            if (keys['s'] || keys['arrowdown']) playerMesh.position.z += moveSpeed;
+            if (keys['a'] || keys['arrowleft']) playerMesh.position.x -= moveSpeed;
+            if (keys['d'] || keys['arrowright']) playerMesh.position.x += moveSpeed;
+
+            // Player Rotation towards mouse
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(planeFloor);
+            if (intersects.length > 0) {
+                const p = intersects[0].point;
+                playerMesh.lookAt(p.x, playerMesh.position.y, p.z);
+            }
+
+            // Camera Tracking
+            const camOffset = gameState.scoped ? 8 : 18;
+            camera.position.x = playerMesh.position.x;
+            camera.position.z = playerMesh.position.z + camOffset;
+            camera.position.y = playerMesh.position.y + (gameState.scoped ? 10 : 22);
+            camera.lookAt(playerMesh.position);
+
+            // Bot behavior
+            bots.forEach(bot => {
+                bot.mesh.position.addScaledVector(bot.moveDir, 0.08);
+                if (Math.abs(bot.mesh.position.x) > 180 || Math.abs(bot.mesh.position.z) > 180) {
+                    bot.moveDir.negate();
+                }
+
+                const dist = bot.mesh.position.distanceTo(playerMesh.position);
+                if (dist < 25) {
+                    bot.mesh.lookAt(playerMesh.position);
+                    bot.shootTimer++;
+                    if (bot.shootTimer % 45 === 0) {
+                        takeDamage(7);
+                        redDotsMinimap.push({ x: bot.mesh.position.x, z: bot.mesh.position.z, time: 1.0 });
+                    }
+                }
+            });
+
+            // Minimap render
+            renderMinimap();
+
+            renderer.render(scene, camera);
+        }
+
+        /* --- MINIMAP RENDERING --- */
+        function renderMinimap() {
+            if (!minimapCtx) return;
+            const size = minimapCanvas.width = 160;
+            minimapCanvas.height = 160;
+
+            minimapCtx.fillStyle = '#0b0f19';
+            minimapCtx.fillRect(0, 0, size, size);
+
+            const scale = 0.3;
+            const cx = size / 2, cy = size / 2;
+
+            // Safe Zone Ring
+            minimapCtx.strokeStyle = '#00ccff';
+            minimapCtx.lineWidth = 2;
+            minimapCtx.beginPath();
+            minimapCtx.arc(cx, cy, gameState.zoneRadius * scale, 0, Math.PI * 2);
+            minimapCtx.stroke();
+
+            // Gunfire Red Dots
+            redDotsMinimap.forEach((dot, idx) => {
+                dot.time -= 0.02;
+                if (dot.time > 0) {
+                    const rx = (dot.x - playerMesh.position.x) * scale;
+                    const rz = (dot.z - playerMesh.position.z) * scale;
+                    minimapCtx.fillStyle = `rgba(255, 0, 0, ${dot.time})`;
+                    minimapCtx.beginPath();
+                    minimapCtx.arc(cx + rx, cy + rz, 5, 0, Math.PI * 2);
+                    minimapCtx.fill();
+                }
+            });
+
+            // Player Marker
+            minimapCtx.fillStyle = '#ff9900';
+            minimapCtx.beginPath();
+            minimapCtx.arc(cx, cy, 4, 0, Math.PI * 2);
+            minimapCtx.fill();
+        }
+
+        function updateHUD() {
+            document.getElementById('hud-alive').innerText = gameState.alive;
+            document.getElementById('hud-kills').innerText = gameState.kills;
+
+            const hpPct = Math.max(0, (gameState.hp / gameState.maxHp) * 100);
+            document.getElementById('hp-bar').style.width = `${hpPct}%`;
+            document.getElementById('hp-val').innerText = `${Math.ceil(gameState.hp)}/${gameState.maxHp}`;
+
+            document.getElementById('wep1-ammo').innerText = WEAPONS[0].currentAmmo;
+            document.getElementById('wep2-ammo').innerText = WEAPONS[1].currentAmmo;
+            document.getElementById('wep3-ammo').innerText = WEAPONS[2].currentAmmo;
+            document.getElementById('wep4-ammo').innerText = WEAPONS[3].currentAmmo;
+
+            document.getElementById('gloo-count').innerText = gameState.glooWalls;
+            document.getElementById('med-count').innerText = gameState.medkits;
+        }
+
+        function triggerVictory() {
+            gameState.active = false;
+            audio.playBooyah();
+            document.getElementById('result-title').innerText = "BOOYAH!";
+            document.getElementById('end-kills').innerText = gameState.kills;
+            document.getElementById('end-damage').innerText = gameState.totalDamage;
+            document.getElementById('end-rank').innerText = "#1 / 12";
+            document.getElementById('game-over-screen').classList.remove('hidden');
+        }
+
+        function triggerGameOver() {
+            gameState.active = false;
+            document.getElementById('result-title').innerText = "ELIMINATED";
+            document.getElementById('end-kills').innerText = gameState.kills;
+            document.getElementById('end-damage').innerText = gameState.totalDamage;
+            document.getElementById('end-rank').innerText = `#${gameState.alive} / 12`;
+            document.getElementById('game-over-screen').classList.remove('hidden');
+        }
+
+        function returnToLobby() {
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('hud-overlay').classList.add('hidden');
+            document.getElementById('lobby-screen').classList.remove('hidden');
+        }
+
+        function onWindowResize() {
+            if (!camera || !renderer) return;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
+```
